@@ -1,0 +1,3 @@
+@echo off
+echo Starting Krishan Beniwal Portfolio development server...
+npm.cmd run dev
