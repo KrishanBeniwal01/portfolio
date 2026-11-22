@@ -65,59 +65,69 @@ export default function Contact({ onShowToast }) {
 
     setIsSubmitting(true);
 
+    const mailtoDraftUrl = `mailto:${PERSONAL_INFO.email}?subject=${encodeURIComponent(
+      formData.subject || 'Portfolio Inquiry: Opportunities'
+    )}&body=${encodeURIComponent(
+      `Hello Krishan,\n\nFrom: ${formData.name}\nEmail: ${formData.email}\n\nMessage:\n${formData.message}`
+    )}`;
+
     try {
-      // Step 1: Try local or production FastAPI backend endpoint first
       let submissionSuccess = false;
       let responseMessage = '';
 
+      // 1. First attempt: Free direct submission to Krishan's email via FormSubmit.co
       try {
-        const response = await fetch('/api/contact', {
+        const fsResponse = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(PERSONAL_INFO.email)}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            email: formData.email,
+            _subject: `Portfolio Contact: ${formData.subject}`,
+            message: formData.message,
+            _template: 'table'
+          })
         });
 
-        if (response.ok) {
-          const resData = await response.json();
-          submissionSuccess = true;
-          responseMessage = resData.message || 'Message received successfully by Krishan!';
+        if (fsResponse.ok) {
+          const fsData = await fsResponse.json();
+          if (fsData.success === 'true' || fsData.success === true) {
+            submissionSuccess = true;
+            responseMessage = 'Thank you! Your message has been sent directly to Krishan Beniwal.';
+          }
         }
-      } catch (backendErr) {
-        // Local FastAPI endpoint was not running or reachable
+      } catch (fsErr) {
+        // Fall through to next handler
       }
 
-      // Step 2: Fallback to public form forwarding service (Web3Forms API)
+      // 2. Second attempt: Local / Deployed FastAPI backend (/api/contact)
       if (!submissionSuccess) {
         try {
-          const fallbackRes = await fetch('https://api.web3forms.com/submit', {
+          const response = await fetch('/api/contact', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-              // Public Access Key configured for direct inbox delivery to Krishan Beniwal
-              access_key: '5631aa67-74be-4c4f-9e7f-6d278693ef2d',
-              name: formData.name,
-              email: formData.email,
-              subject: `Portfolio Contact: ${formData.subject}`,
-              message: formData.message,
-              from_name: `${formData.name} (Portfolio Inquiry)`,
-              to_email: 'kbeniwal289@gmail.com'
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData),
           });
 
-          const fallbackData = await fallbackRes.json();
-          if (fallbackRes.ok && fallbackData.success) {
+          if (response.ok) {
+            const resData = await response.json();
             submissionSuccess = true;
-            responseMessage = 'Thank you! Your message was delivered directly to Krishan Beniwal.';
-          } else {
-            throw new Error(fallbackData.message || 'Submission service temporarily unavailable.');
+            responseMessage = resData.message || 'Message received successfully by Krishan!';
           }
-        } catch (apiErr) {
-          // Both failed: offer direct mailto fallback link with the exact message pre-filled
-          throw new Error('Network dispatch error. Please click below to send via your email client.');
+        } catch (backendErr) {
+          // Backend not running
         }
+      }
+
+      // 3. Fallback: Direct Mailto Dispatcher (Guaranteed delivery without external API dependencies)
+      if (!submissionSuccess) {
+        // Open the pre-filled message in user's email client
+        window.location.href = mailtoDraftUrl;
+        submissionSuccess = true;
+        responseMessage = 'Email client opened with your pre-filled message to kbeniwal289@gmail.com! Please review and click Send.';
       }
 
       if (submissionSuccess) {
@@ -136,19 +146,19 @@ export default function Contact({ onShowToast }) {
         });
 
         if (onShowToast) {
-          onShowToast({ type: 'success', message: 'Message successfully sent to Krishan Beniwal!' });
+          onShowToast({ type: 'success', message: 'Message drafted for Krishan Beniwal!' });
         }
 
+        // Reset form
         setFormData({ name: '', email: '', subject: '', message: '' });
       }
     } catch (err) {
+      // Direct fail-safe mailto link
+      window.location.href = mailtoDraftUrl;
       setStatusMessage({
-        type: 'error',
-        text: err.message || 'Could not send message. Please reach out directly to kbeniwal289@gmail.com'
+        type: 'success',
+        text: 'Opening your email client to send to kbeniwal289@gmail.com...'
       });
-      if (onShowToast) {
-        onShowToast({ type: 'error', message: 'Failed to dispatch message.' });
-      }
     } finally {
       setIsSubmitting(false);
     }
